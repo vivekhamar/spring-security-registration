@@ -13,12 +13,15 @@ import org.springframework.security.web.RedirectStrategy;
 import org.springframework.security.web.WebAttributes;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Component("myAuthenticationSuccessHandler")
 public class MySimpleUrlAuthenticationSuccessHandler implements AuthenticationSuccessHandler {
@@ -44,10 +47,10 @@ public class MySimpleUrlAuthenticationSuccessHandler implements AuthenticationSu
 
             String username;
             if (authentication.getPrincipal() instanceof User) {
-            	username = ((User)authentication.getPrincipal()).getEmail();
+                username = ((User)authentication.getPrincipal()).getEmail();
             }
             else {
-            	username = authentication.getName();
+                username = authentication.getName();
             }
             LoggedUser user = new LoggedUser(username, activeUserStore);
             session.setAttribute("user", user);
@@ -82,26 +85,37 @@ public class MySimpleUrlAuthenticationSuccessHandler implements AuthenticationSu
     protected String determineTargetUrl(final Authentication authentication) {
         boolean isUser = false;
         boolean isAdmin = false;
+        boolean isManager = false;
         final Collection<? extends GrantedAuthority> authorities = authentication.getAuthorities();
-        for (final GrantedAuthority grantedAuthority : authorities) {
-            if (grantedAuthority.getAuthority().equals("READ_PRIVILEGE")) {
-                isUser = true;
-            } else if (grantedAuthority.getAuthority().equals("WRITE_PRIVILEGE")) {
-                isAdmin = true;
-                isUser = false;
-                break;
-            }
+        Set<String> privileges = authorities.stream().map(GrantedAuthority::getAuthority).collect(Collectors.toSet());
+
+        if (privileges.contains("READ_PRIVILEGE")) {
+            isUser = true;
         }
+
+        if (privileges.contains("DELETE_PRIVILEGE")) {
+            isManager = true;
+            isUser = false;
+        }
+
+        if (privileges.contains("WRITE_PRIVILEGE")) {
+            isAdmin = true;
+            isManager = false;
+            isUser = false;
+        }
+
         if (isUser) {
-        	 String username;
-             if (authentication.getPrincipal() instanceof User) {
-             	username = ((User)authentication.getPrincipal()).getEmail();
-             }
-             else {
-             	username = authentication.getName();
-             }
+            String username;
+            if (authentication.getPrincipal() instanceof User) {
+                username = ((User)authentication.getPrincipal()).getEmail();
+            }
+            else {
+                username = authentication.getName();
+            }
 
             return "/homepage.html?user="+username;
+        } else if (isManager) {
+            return "/management";
         } else if (isAdmin) {
             return "/console";
         } else {
